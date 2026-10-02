@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper to prototype</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #fdfdfc;
+    --text: #1c1d1f;
+    --muted: #6a6e73;
+    --line: #e2e3e5;
+    --code-bg: #f4f5f6;
+    --accent: #3a5bc7;
+    --pass: #1d7a3d;
+    --fail: #c62d2d;
+    --changed: #ddf2e2;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161718;
+      --text: #e6e6e3;
+      --muted: #9a9ea3;
+      --line: #2c2e31;
+      --code-bg: #1e2022;
+      --accent: #8ca4f0;
+      --pass: #6cc487;
+      --fail: #f07a7a;
+      --changed: #1f3a27;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 56px 20px 96px; }
+  h1 { font-size: 1.75rem; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 8px; }
+  .intro { color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  form { display: flex; gap: 8px; }
+  input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  button { font: inherit; cursor: pointer; }
+  #build {
+    color: #fff;
+    background: var(--accent);
+    border: 0;
+    border-radius: 6px;
+    padding: 9px 20px;
+    font-weight: 550;
+  }
+  @media (prefers-color-scheme: dark) { #build { color: #10131a; } }
+  #build:disabled { opacity: 0.55; cursor: default; }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .example { color: var(--muted); font-size: 0.9rem; margin: 10px 0 0; }
+  .example button {
+    color: var(--accent);
+    background: none;
+    border: 0;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  #error { color: var(--fail); margin: 10px 0 0; }
+  #error:empty { display: none; }
+
+  ol { list-style: none; padding: 0; margin: 40px 0 0; }
+  .step { border-top: 1px solid var(--line); padding: 14px 0; scroll-margin-top: 16px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-head .n { color: var(--muted); width: 1ch; }
+  .step-head h2 { font-size: 1.05rem; font-weight: 600; margin: 0; flex: 1; }
+  .status { color: var(--muted); font-size: 0.9rem; }
+  .step.working .status { color: var(--accent); }
+  .step.passed .status { color: var(--pass); }
+  .step.failed .status { color: var(--fail); }
+  .body:empty { display: none; }
+  .body { margin: 10px 0 0 calc(1ch + 12px); }
+
+  .prose { max-width: 70ch; }
+  .prose h3 { font-size: 1rem; margin: 18px 0 4px; }
+  .prose h3:first-child { margin-top: 0; }
+  .prose p { margin: 0 0 8px; }
+  .prose ul { list-style: disc; margin: 0 0 8px; padding-left: 20px; }
+  .prose code { font-size: 0.88em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px; }
+
+  pre {
+    position: relative;
+    margin: 0;
+    max-height: 30rem;
+    overflow: auto;
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 12px 0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre span { display: block; box-sizing: border-box; min-width: 100%; width: max-content; padding: 0 14px; white-space: pre; }
+  pre span.changed { background: var(--changed); }
+  #log span { white-space: pre-wrap; word-break: break-word; }
+  #log .attempt { color: var(--muted); }
+  #log .attempt:not(:first-child) { margin-top: 10px; }
+  #log .bad { color: var(--fail); }
+  #log .good { color: var(--pass); }
+  .verdict { margin: 12px 0 0 calc(1ch + 12px); font-weight: 550; }
+  .verdict code { font-weight: 400; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paper to prototype</h1>
+  <p class="intro">
+    Paste an arXiv paper. Claude reads it, plans a small version of the core idea, writes that in PyTorch and
+    runs it on toy data. If the script crashes or misses its target, Claude gets the error and tries again.
+  </p>
+
+  <form id="form">
+    <input id="paper" placeholder="arXiv link or ID, like 1706.03762" aria-label="arXiv link or ID"
+           autocomplete="off" spellcheck="false">
+    <button id="build">Build</button>
+  </form>
+  <p class="example">Or try it on <button type="button" id="example">Attention Is All You Need</button>.</p>
+  <p id="error" role="alert"></p>
+
+  <ol>
+    <li class="step" id="extract">
+      <div class="step-head"><span class="n">1</span><h2>Read the paper</h2><span class="status">Waiting</span></div>
+      <div class="body prose"></div>
+    </li>
+    <li class="step" id="plan">
+      <div class="step-head"><span class="n">2</span><h2>Plan a toy version</h2><span class="status">Waiting</span></div>
+      <div class="body prose"></div>
+    </li>
+    <li class="step" id="code">
+      <div class="step-head"><span class="n">3</span><h2>Write the code</h2><span class="status">Waiting</span></div>
+      <pre class="body"></pre>
+    </li>
+    <li class="step" id="run">
+      <div class="step-head"><span class="n">4</span><h2>Run it</h2><span class="status">Waiting</span></div>
+      <pre class="body" id="log"></pre>
+    </li>
+  </ol>
+</main>
+
+<script>
+const form = document.getElementById("form");
+const input = document.getElementById("paper");
+const build = document.getElementById("build");
+const errorBox = document.getElementById("error");
+const log = document.getElementById("log");
+
+const steps = {};
+for (const id of ["extract", "plan", "code", "run"]) {
+  const el = document.getElementById(id);
+  steps[id] = { el, status: el.querySelector(".status"), body: el.querySelector(".body"), text: "" };
+}
+const busyLabel = { extract: "Reading", plan: "Planning", code: "Writing" };
+
+let source = null;
+let current = null;
+let lastRunCode = null;
+
+function escape(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Just enough Markdown for what Claude writes in steps 1 and 2.
+function markdown(text) {
+  const inline = s => escape(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  let html = "";
+  let inList = false;
+  for (const line of text.split("\n")) {
+    const heading = line.match(/^#+\s+(.*)/);
+    const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
+    if (item && !inList) { html += "<ul>"; inList = true; }
+    if (!item && inList) { html += "</ul>"; inList = false; }
+    if (heading) html += `<h3>${inline(heading[1])}</h3>`;
+    else if (item) html += `<li>${inline(item[1])}</li>`;
+    else if (line.trim()) html += `<p>${inline(line)}</p>`;
+  }
+  return html + (inList ? "</ul>" : "");
+}
+
+// While the code streams in, hide the ```python fence around it.
+function unfence(text) {
+  return text.replace(/^[\s\S]*?```(?:python|py)?\n/, "").replace(/```[\s\S]*$/, "");
+}
+
+function showCode(code, compareTo) {
+  const before = new Set(compareTo ? compareTo.split("\n") : []);
+  const body = steps.code.body;
+  body.innerHTML = code.split("\n").map(line => {
+    const changed = compareTo && line.trim() && !before.has(line);
+    return `<span${changed ? ' class="changed"' : ""}>${escape(line) || " "}</span>`;
+  }).join("");
+  const firstChange = body.querySelector(".changed");
+  body.scrollTop = firstChange ? firstChange.offsetTop - body.clientHeight / 3 : body.scrollHeight;
+}
+
+function draw(id) {
+  const step = steps[id];
+  if (id === "code") showCode(unfence(step.text));
+  else step.body.innerHTML = markdown(step.text);
+}
+
+function setState(id, state, label) {
+  steps[id].el.classList.remove("working", "passed", "failed");
+  if (state) steps[id].el.classList.add(state);
+  steps[id].status.textContent = label;
+}
+
+function logLine(text, className) {
+  const span = document.createElement("span");
+  span.textContent = text || " ";
+  if (className) span.className = className;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function finish() {
+  source?.close();
+  source = null;
+  build.disabled = false;
+  build.textContent = "Build";
+}
+
+const handlers = {
+  start(e) {
+    current = e.step;
+    setState(e.step, "working", busyLabel[e.step] || "Running");
+    steps[e.step].el.scrollIntoView({ block: "start" });
+  },
+  text(e) {
+    steps[current].text += e.text;
+    draw(current);
+  },
+  output(e) {
+    steps[e.step].text = e.text;
+    if (e.step === "code" && lastRunCode) {
+      showCode(e.text, lastRunCode);
+      setState("code", "passed", "Fixed");
+    } else {
+      draw(e.step);
+      setState(e.step, "passed", "Done");
+    }
+  },
+  attempt(e) {
+    lastRunCode = steps.code.text;
+    setState("run", "working", `Attempt ${e.n} of ${e.of}`);
+    logLine(`Attempt ${e.n} of ${e.of}: python prototype.py`, "attempt");
+  },
+  log(e) {
+    const bad = /^(Traceback|FAILURE:|\w*(Error|Exception)\b|Killed after)/.test(e.text);
+    logLine(e.text, bad ? "bad" : e.text.startsWith("SUCCESS:") ? "good" : "");
+  },
+  result(e) {
+    logLine(e.ok ? `Passed: ${e.reason}` : `Failed: ${e.reason}`, e.ok ? "good" : "bad");
+  },
+  fix(e) {
+    current = "code";
+    steps.code.text = "";
+    setState("run", "failed", `Attempt ${e.attempt} failed`);
+    setState("code", "working", `Fixing attempt ${e.attempt}`);
+    steps.code.el.scrollIntoView({ block: "start" });
+    logLine("Sending the error back to Claude.", "attempt");
+  },
+  done(e) {
+    const tries = e.attempts === 1 ? "first try" : `attempt ${e.attempts}`;
+    setState("run", e.ok ? "passed" : "failed", e.ok ? `Passed on ${tries}` : "Failed");
+    const verdict = document.createElement("p");
+    verdict.className = "verdict";
+    verdict.innerHTML = (e.ok
+      ? "It works. The script, plan and logs are saved in "
+      : `Still failing after ${e.attempts} attempts. Every version and its output are saved in `)
+      + `<code>${escape(e.folder)}</code>`;
+    steps.run.el.appendChild(verdict);
+    finish();
+  },
+  error(e) {
+    errorBox.textContent = e.message;
+    for (const id in steps) {
+      if (steps[id].el.classList.contains("working")) setState(id, "failed", "Stopped");
+    }
+    finish();
+  },
+};
+
+function start(paper) {
+  if (!paper) {
+    errorBox.textContent = "Paste an arXiv link or ID first.";
+    input.focus();
+    return;
+  }
+  source?.close();
+  errorBox.textContent = "";
+  current = null;
+  lastRunCode = null;
+  for (const id in steps) {
+    steps[id].text = "";
+    steps[id].body.innerHTML = "";
+    setState(id, null, "Waiting");
+  }
+  document.querySelector(".verdict")?.remove();
+  build.disabled = true;
+  build.textContent = "Building";
+
+  source = new EventSource("/run?paper=" + encodeURIComponent(paper));
+  source.onmessage = msg => {
+    const event = JSON.parse(msg.data);
+    handlers[event.type](event);
+  };
+  source.onerror = () => {
+    if (source) handlers.error({ message: "Lost the connection to the server. Is app.py still running?" });
+  };
+}
+
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  start(input.value.trim());
+});
+document.getElementById("example").addEventListener("click", () => {
+  input.value = "https://arxiv.org/abs/1706.03762";
+  start(input.value);
+});
+
+// /?paper=1706.03762 starts a run straight away.
+const preset = new URLSearchParams(location.search).get("paper");
+if (preset) {
+  input.value = preset;
+  start(preset);
+}
+</script>
+</body>
+</html>
